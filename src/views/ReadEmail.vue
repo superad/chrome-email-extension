@@ -23,16 +23,25 @@
           </div>
         </a-select-option>
       </a-select>
+      <a-select
+        v-model:filterEmails="filterEmails"
+        mode="tags"
+        style="width: 50%"
+        placeholder="过滤发件箱"
+        :max-tag-count="1"
+        @change="handleChange"
+      ></a-select>
       <a-button type="primary" size="middle" @click="loadEmail">加载邮件</a-button>
     </a-space-compact>
-
     <a-button style="margin: 10px 5px" type="link" size="middle" @click="reLogin"
       >重新登录</a-button
     >
   </a-flex>
+
   <div style="margin: 8px 5px">
     <ReadAliyunEmail
       v-model:reload="reloadFlag"
+      :filter-emails="filterEmails"
       v-if="selectedEmail === 'https://mail.aliyun.com'"
     />
     <ReadQQEmail v-model:reload="reloadFlag" v-if="selectedEmail === 'https://mail.qq.com'" />
@@ -48,6 +57,11 @@ const value = ref('https://mail.aliyun.com')
 const selectedEmail = ref('')
 const reloadFlag = ref(true)
 
+const filterEmails = ref<Set<string>>()
+const handleChange = (emails: string[]) => {
+  filterEmails.value = new Set(emails)
+  console.log(`filterEmails :`, filterEmails.value)
+}
 const options = ref([
   {
     value: 'https://mail.aliyun.com',

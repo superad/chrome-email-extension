@@ -5,6 +5,7 @@
       :value="reload"
       @input="emit('update:reload', ($event.target as HTMLInputElement).value)"
     />
+
     <a-alert
       v-if="loadingVisible"
       message="阿里云邮件加载中..."
@@ -13,35 +14,36 @@
       closable
     />
     <a-alert v-if="errorMsgVisible" :message="errorMsg" type="warning" show-icon closable />
-    <br />
-
-    <div>
+    <div style="margin: 8px 5px">
       <h3>邮件详情:</h3>
-      <table border="1" v-for="(email_table, table_index) in email_tables" style="margin: 8px 5px">
-        <thead>
-          <tr>
-            <th
-              v-for="(header, header_index) in email_table.header"
-              :key="header_str.concat(table_index + '', header_index + '')"
+      <div v-for="(email_table, table_index) in email_tables">
+        <span>发件人:{{ email_table.from }} 主题: {{ email_table.title }}</span>
+        <table border="1" style="margin: 8px 5px">
+          <thead>
+            <tr>
+              <th
+                v-for="(header, header_index) in email_table.header"
+                :key="header_str.concat(table_index + '', header_index + '')"
+              >
+                {{ header }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(row_data, row_index) in email_table.datas"
+              :key="row_str.concat(table_index + '', row_index + '')"
             >
-              {{ header }}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(row_data, row_index) in email_table.datas"
-            :key="row_str.concat(table_index + '', row_index + '')"
-          >
-            <td
-              v-for="(cell_data, cell_index) in row_data"
-              :key="cell_str.concat(table_index + '', row_index + '', cell_index + '')"
-            >
-              {{ cell_data }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <td
+                v-for="(cell_data, cell_index) in row_data"
+                :key="cell_str.concat(table_index + '', row_index + '', cell_index + '')"
+              >
+                {{ cell_data }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -73,6 +75,10 @@ onMounted(() => {
 //加载数据
 const emails = ref([] as Email[])
 const reload = ref('init-1')
+
+//对外通讯变量
+const props = defineProps(['reload', 'filterEmails'])
+const emit = defineEmits(['update:reload'])
 
 //弹出提示框
 const loadingVisible = ref<boolean>(true) //1s自动关闭
@@ -172,9 +178,20 @@ interface EmailData {
 }
 
 interface EmailTable {
+  from: string
+  title: string
   header: string[]
   datas: EmailData[]
+  description?: string
 }
+
+function checkEmail(email: string): boolean {
+  if (props.filterEmails == null || props.filterEmails.size === 0) {
+    return true
+  }
+  return props.filterEmails.has(email)
+}
+
 const email_tables = ref([] as EmailTable[])
 
 async function reloadEmails() {
@@ -207,7 +224,7 @@ async function reloadEmails() {
     }
 
     dataList.forEach((data: any) => {
-      if (data.from.email === 'xiaoyao@hztrust.com') {
+      if (checkEmail(data.from.email)) {
         let email = {} as Email
         email['subject'] = data.subject
         email['mailId'] = data.mailId
@@ -229,7 +246,8 @@ function pureString(input: string): string {
   return input.replace(/\n/g, '').replace(/ /g, '')
 }
 
-const parseHtml = (html: string) => {
+const parseHtml = (responseData: any, html: string) => {
+  console.log('parseHtml get responseData,', responseData)
   const doc = domParser.value?.parseFromString(html, 'text/html')
   if (!doc) {
     console.log('DOMParser instance is null or undefined.')
@@ -240,9 +258,13 @@ const parseHtml = (html: string) => {
   const rows = Array.from(table!.rows)
   console.log('ParseHtml rows length: ', rows.length)
 
+  let fromEmail = responseData.data.from.email + '(' + responseData.data.from.name + ')'
   const email_table = {
+    from: fromEmail,
+    title: responseData.data.subject,
     header: [],
-    datas: [] as EmailData[]
+    datas: [] as EmailData[],
+    description: ''
   } as EmailTable
 
   let row_num = 0
@@ -291,7 +313,7 @@ async function reloadEmailDetails() {
       const response = await axiosInstance.value!.post('/alimail/ajax/mail/loadMail.txt', formData)
       const responseData = response.data
       const html = responseData.data.body
-      parseHtml(html)
+      parseHtml(responseData, html)
     } catch (err) {
       console.log('reloadEmailDetail failed. ', err)
       showErrorMsg('阅读邮件详情失败，请联系开发人员。')
@@ -301,13 +323,11 @@ async function reloadEmailDetails() {
   console.log('email_tables: ', email_tables.value)
 }
 
-const props = defineProps(['reload'])
-const emit = defineEmits(['update:reload'])
 //加载入口，根据父组件reload值变化，重新加载邮件
 watch(
-  () => props.reload,
+  [() => props.reload],
   () => {
-    console.log('reload email: ', props.reload)
+    console.log('reload email: ', props.reload, 'filterEmails: ', props.filterEmails)
     //显示加载
     showLoadingTips()
     //加载cookie
