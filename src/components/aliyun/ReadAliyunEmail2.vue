@@ -1,44 +1,22 @@
 <template>
   <div>
-    <!-- <input
-      type="hidden"
-      :value="reload"
-      @input="emit('update:reload', ($event.target as HTMLInputElement).value)"
-    /> -->
-
     <a-alert v-show="loadingVisible" :message="tipMsg" type="success" show-icon closable />
-    <a-alert v-if="errorMsgVisible" :message="errorMsg" type="warning" show-icon closable />
+    <a-alert v-show="errorMsgVisible" :message="errorMsg" type="warning" show-icon closable />
 
     <div style="margin: 8px 5px">
-      <h3>邮件详情:</h3>
-      <div v-for="(email_table, table_index) in email_tables">
-        <span>发件人:{{ email_table.from }} 主题: {{ email_table.title }}</span>
-        <table border="1" style="margin: 8px 5px">
-          <thead>
-            <tr>
-              <th
-                v-for="(header, header_index) in email_table.header"
-                :key="header_str.concat(table_index + '', header_index + '')"
-              >
-                {{ header }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(row_data, row_index) in email_table.datas"
-              :key="row_str.concat(table_index + '', row_index + '')"
-            >
-              <td
-                v-for="(cell_data, cell_index) in row_data"
-                :key="cell_str.concat(table_index + '', row_index + '', cell_index + '')"
-              >
-                {{ cell_data }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <a-flex vertical="vertical" gap="middle">
+        <div
+          v-for="(item, index) in email_contents"
+          :key="item.email['mailId']"
+          :style="{ ...baseStyle }"
+        >
+          <p>发件人:{{ item.email['from'] }}</p>
+          <p>主题:{{ item.email['subject'] }}</p>
+          <p>发件时间:{{ item.email['date'] }}</p>
+          <div v-html="item.html"></div>
+          <a-divider style="height: 2px; background-color: #7cb305">邮件分割线</a-divider>
+        </div>
+      </a-flex>
     </div>
   </div>
 </template>
@@ -47,11 +25,18 @@
 import { onMounted, ref, watch } from 'vue'
 import { type AxiosInstance } from 'axios'
 import createAxiosInstance from '@/axiosConfig'
+import DOMPurify from 'dompurify'
+import type { CSSProperties } from 'vue'
 
 const header_str = ref('header')
 const row_str = ref('row')
 const cell_str = ref('cell')
 const tipMsg = ref('阿里云邮件加载中...')
+const email_contents = ref([] as EmailContent[])
+
+const baseStyle: CSSProperties = {
+  width: '45%'
+}
 
 //cookies 相关
 const cookies = ref([])
@@ -175,16 +160,9 @@ interface Email {
   [key: string | number]: any
 }
 
-interface EmailData {
-  [key: string]: any
-}
-
-interface EmailTable {
-  from: string
-  title: string
-  header: string[]
-  datas: EmailData[]
-  description?: string
+interface EmailContent {
+  email: Email
+  html: string
 }
 
 function checkEmail(email: string): boolean {
@@ -194,7 +172,21 @@ function checkEmail(email: string): boolean {
   return props.filterEmails.includes(email)
 }
 
-const email_tables = ref([] as EmailTable[])
+const dateConvert = (timestamp: number): string => {
+  if (!timestamp) {
+    return ''
+  }
+  let date = new Date(timestamp)
+  // 格式化日期
+  let year = date.getFullYear()
+  let month = ('0' + (date.getMonth() + 1)).slice(-2) // 月份是从 0 开始的，所以加 1
+  let day = ('0' + date.getDate()).slice(-2)
+  let hours = ('0' + date.getHours()).slice(-2)
+  let minutes = ('0' + date.getMinutes()).slice(-2)
+  let seconds = ('0' + date.getSeconds()).slice(-2)
+  let dateString = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  return dateString
+}
 
 async function reloadEmails() {
   if (!loadCookieSuccess.value) {
@@ -208,7 +200,12 @@ async function reloadEmails() {
   emails.value.length = 0
   try {
     const formData = new FormData()
-    formData.append('query', '{"folderIds":["2"]}')
+    const query = {
+      fromStrings: props.filterEmails,
+      advancedSearch: true
+    }
+    console.log('reloadEmails query is : ', JSON.stringify(query))
+    formData.append('query', JSON.stringify(query))
     formData.append('showFrom', '1')
     formData.append('offset', '0')
     formData.append('length', '75')
@@ -233,6 +230,7 @@ async function reloadEmails() {
         email['subject'] = data.subject
         email['mailId'] = data.mailId
         email['timestamp'] = data.timestamp
+        email['date'] = dateConvert(data.timestamp)
         email['from'] = data.from.email
         email['status'] = data.status
         emails.value.push(email)
@@ -245,55 +243,18 @@ async function reloadEmails() {
   }
 }
 
-function pureString(input: string): string {
-  return input.replace(/\n/g, '').replace(/ /g, '')
-}
-
-const parseHtml = (responseData: any, html: string) => {
-  // console.log('parseHtml get responseData,', responseData)
-  const doc = domParser.value?.parseFromString(html, 'text/html')
-  if (!doc) {
-    console.log('DOMParser instance is null or undefined.')
-    showErrorMsg('邮件解析失败，请联系开发人员。')
+const parseHtml = (email: Email, html: string) => {
+  if (!html) {
+    console.log('parseHtml is empty. mailId: ', email['mailId'])
     return
   }
-  const table = doc.querySelector('table')
-  const rows = Array.from(table!.rows)
-  // console.log('ParseHtml rows length: ', rows.length)
-
-  let fromEmail = responseData.data.from.email + '(' + responseData.data.from.name + ')'
-  const email_table = {
-    from: fromEmail,
-    title: responseData.data.subject,
-    header: [],
-    datas: [] as EmailData[],
-    description: ''
-  } as EmailTable
-
-  let row_num = 0
-  let header_length = 0
-  for (const row of rows) {
-    const cells = Array.from(row.cells)
-    // console.log('ParseHtml cells length: ', cells.length)
-    const datas = [] as string[]
-    for (const cell of cells) {
-      if (cell.textContent) {
-        datas.push(pureString(cell.textContent))
-      } else {
-        datas.push('')
-      }
-    }
-    if (row_num == 0) {
-      // header
-      email_table.header = datas
-      header_length = datas.length
-    } else if (datas.length == header_length) {
-      //body
-      email_table.datas.push(datas)
-    }
-    row_num++
+  const sanitize = DOMPurify.sanitize(html)
+  const email_content = {
+    email: email,
+    html: sanitize
   }
-  email_tables.value.push(email_table)
+  email_contents.value.push(email_content)
+  console.log('parseHtml success. mailId: ', email['mailId'])
 }
 
 async function reloadEmailDetails() {
@@ -303,7 +264,7 @@ async function reloadEmailDetails() {
     return
   }
   //清空邮件内容数组
-  email_tables.value.length = 0
+  email_contents.value.length = 0
   emails.value.forEach(async (email: Email) => {
     try {
       const formData = new FormData()
@@ -317,7 +278,7 @@ async function reloadEmailDetails() {
       const responseData = response.data
       if (responseData.data.body) {
         const html = responseData.data.body
-        parseHtml(responseData, html)
+        parseHtml(email, html)
       } else {
         console.log('responseData has no body: ', responseData.data)
       }

@@ -16,6 +16,7 @@
     "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.3",
     "axios": "^1.7.2",
+    "dompurify": "^3.1.5",
     "vue": "^3.4.29"
   },
   "devDependencies": {

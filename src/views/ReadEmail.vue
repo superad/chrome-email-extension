@@ -39,7 +39,7 @@
   </a-flex>
 
   <div style="margin: 8px 5px">
-    <ReadAliyunEmail
+    <ReadAliyunEmail2
       v-model:reload="reload"
       :filter-emails="filterEmails"
       v-if="emailbox === 'https://mail.aliyun.com'"
@@ -50,7 +50,7 @@
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
 import Svg from '@/components/svg/Svg.vue'
-import ReadAliyunEmail from '@/components/aliyun/ReadAliyunEmail.vue'
+import ReadAliyunEmail2 from '@/components/aliyun/ReadAliyunEmail2.vue'
 import ReadQQEmail from '@/components/qq/ReadQQEmail.vue'
 
 const emailbox = ref('https://mail.aliyun.com')
