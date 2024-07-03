@@ -75,7 +75,7 @@ function clearCookies(request, sendResponse) {
 
 // 清理指定域名下的 cookie 的函数
 function clearCookiesForDomain(domain) {
-  chrome.cookies.getAll({ domain: request.domain }, (cookies) => {
+  chrome.cookies.getAll({ domain: domain }, (cookies) => {
     cookies.forEach((cookie) => {
       chrome.cookies.remove(
         { url: `https://${cookie.domain}${cookie.path}`, name: cookie.name },

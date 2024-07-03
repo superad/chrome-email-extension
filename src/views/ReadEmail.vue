@@ -1,9 +1,8 @@
 <template>
   <a-flex justify="space-between">
-    <!-- <a-space style="gap: 8px; margin: 10px 5px"> -->
     <a-space-compact block size="middle" style="margin: 10px 5px">
       <a-select
-        v-model:value="value"
+        v-model:value="emailbox"
         style="width: 180px"
         placeholder="选择邮箱"
         option-label-prop="children"
@@ -24,11 +23,12 @@
         </a-select-option>
       </a-select>
       <a-select
-        v-model:filterEmails="filterEmails"
+        :v-model="filterEmails"
+        :value="filterEmails"
         mode="tags"
         style="width: 50%"
         placeholder="过滤发件箱"
-        :max-tag-count="1"
+        :max-tag-count="3"
         @change="handleChange"
       ></a-select>
       <a-button type="primary" size="middle" @click="loadEmail">加载邮件</a-button>
@@ -40,27 +40,26 @@
 
   <div style="margin: 8px 5px">
     <ReadAliyunEmail
-      v-model:reload="reloadFlag"
+      v-model:reload="reload"
       :filter-emails="filterEmails"
-      v-if="selectedEmail === 'https://mail.aliyun.com'"
+      v-if="emailbox === 'https://mail.aliyun.com'"
     />
-    <ReadQQEmail v-model:reload="reloadFlag" v-if="selectedEmail === 'https://mail.qq.com'" />
+    <ReadQQEmail v-model:reload="reload" v-if="emailbox === 'https://mail.qq.com'" />
   </div>
 </template>
 <script lang="ts" setup>
-import { ref, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import Svg from '@/components/svg/Svg.vue'
 import ReadAliyunEmail from '@/components/aliyun/ReadAliyunEmail.vue'
 import ReadQQEmail from '@/components/qq/ReadQQEmail.vue'
 
-const value = ref('https://mail.aliyun.com')
-const selectedEmail = ref('')
-const reloadFlag = ref(true)
+const emailbox = ref('https://mail.aliyun.com')
+const reload = ref(true)
 
-const filterEmails = ref<Set<string>>()
+const filterEmails = ref([] as string[])
 const handleChange = (emails: string[]) => {
-  filterEmails.value = new Set(emails)
-  console.log(`filterEmails :`, filterEmails.value)
+  filterEmails.value = emails
+  console.log('handleChange filterEmails :', filterEmails.value)
 }
 const options = ref([
   {
@@ -76,15 +75,57 @@ const options = ref([
     disabled: false
   }
 ])
-watch(value, (val) => {
-  console.log(`selected:`, val)
+
+onMounted(async () => {
+  loadOptions()
 })
 
 const loadEmail = () => {
-  console.log('LoadEmail For: ', value.value)
-  selectedEmail.value = value.value
+  console.log('LoadEmail For: ', emailbox.value)
   //重新加载开关
-  reloadFlag.value = !reloadFlag.value
+  reload.value = !reload.value
+
+  //保存配置项
+  saveOptions()
+}
+
+//保存配置项
+const saveOptions = () => {
+  console.log('saveOptions start.')
+  chrome.storage.sync.set(
+    {
+      options: {
+        emailbox: emailbox.value,
+        filterEmails: filterEmails.value.join(',')
+      }
+    },
+    function () {
+      console.log('saveOptions success.')
+    }
+  )
+}
+
+//加载配置项
+const loadOptions = () => {
+  console.log('loadOptions start.')
+  chrome.storage.sync.get('options', function (data) {
+    if (!data.options) {
+      console.log('loadOptions empty.')
+      return
+    }
+    console.log('loadOptions data:', data)
+
+    if (data.options.emailbox) {
+      emailbox.value = data.options.emailbox
+    }
+    if (data.options.filterEmails) {
+      filterEmails.value = data.options.filterEmails.split(',')
+    }
+    if (emailbox.value && filterEmails.value) {
+      //加载邮件
+      loadEmail()
+    }
+  })
 }
 
 function sleep(ms: number) {
@@ -103,7 +144,7 @@ function getDomainFromUrl(url: string) {
 
 //重新登录
 const reLogin = () => {
-  let domain = getDomainFromUrl(value.value)
+  let domain = getDomainFromUrl(emailbox.value)
   console.log('resetCookies for: ', domain)
   //清理 Cookies
   chrome.runtime.sendMessage({ action: 'ClearCookies', domain: domain }, (response: any) => {
@@ -115,7 +156,7 @@ const reLogin = () => {
   })
   //跳转登录页面
   sleep(300).then(() => {
-    window.open(value.value, '_blank')
+    window.open(emailbox.value, '_blank')
   })
 }
 </script>

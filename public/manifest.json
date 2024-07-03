@@ -8,7 +8,8 @@
         "storage",
         "activeTab",
         "webRequest",
-        "tabs"
+        "tabs",
+        "alarms"
     ],
     "host_permissions": [
         "http://*/*",
@@ -25,6 +26,7 @@
             "128": "assets/cookie.png"
         }
     },
+    "options_page": "options.html",
     "icons": {
         "16": "assets/cookie.png",
         "48": "assets/cookie.png",
